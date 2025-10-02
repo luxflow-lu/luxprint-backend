@@ -1,26 +1,46 @@
-// juste après la création Printful :
-const created = /* … l’objet de création Printful … */;
-const orderId = created?.result?.id || created?.data?.id || created?.id;
+import { NextRequest, NextResponse } from 'next/server';
+import Stripe from 'stripe';
 
-// On remonte l’info dans Stripe (session + PI)
-try {
-  await stripe.checkout.sessions.update(event.data.object.id, {
-    metadata: {
-      ...(session?.metadata || {}),
-      printful_order_id: String(orderId || ''),
-      printful_store_id: String(process.env.PRINTFUL_STORE_ID || ''),
-    },
-  });
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-  if (session?.payment_intent && typeof session.payment_intent !== 'string') {
-    await stripe.paymentIntents.update(session.payment_intent.id, {
-      metadata: {
-        ...(session.payment_intent.metadata || {}),
-        printful_order_id: String(orderId || ''),
-        printful_store_id: String(process.env.PRINTFUL_STORE_ID || ''),
-      },
-    });
+// --- Stripe client
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
+  apiVersion: '2024-06-20',
+});
+
+// --- Helpers
+function allowlistRegex(): RegExp {
+  const def = '^https:\\/\\/(?:[a-z0-9-]+\\.)?(?:ucarecdn\\.com|ucarecd\\.net)\\/';
+  try {
+    return new RegExp(process.env.ALLOWLIST_REGEX || def, 'i');
+  } catch {
+    return new RegExp(def, 'i');
   }
-} catch (e) {
-  console.error('[webhook] unable to stamp metadata on Stripe:', e);
 }
+
+function parseJSONSafe<T = any>(txt?: string): T | null {
+  try {
+    if (!txt) return null;
+    return JSON.parse(txt) as T;
+  } catch {
+    return null;
+  }
+}
+
+type FrontDesign = {
+  placement: string; // 'front' | 'back' | ...
+  technique?: string;
+  layers: Array<{ type: 'file'; url: string; filename?: string }>;
+};
+
+// Map designs[] -> Printful "files"[] (very permissive; placement kept as "type")
+function buildPrintfulFiles(designs: FrontDesign[], urlAllow: RegExp) {
+  const files: Array<{ url: string; type?: string }> = [];
+  for (const d of designs || []) {
+    for (const l of d.layers || []) {
+      if (l.type !== 'file' || !l.url) continue;
+      if (!urlAllow.test(l.url)) continue;
+      files.push({ url: l.url, type: d.placement }); // Printful accepte 'type' (front/back/…)
+    }
+  }
