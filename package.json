@@ -1,0 +1,21 @@
+{
+  "name": "luxprint-backend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "14.2.4",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "stripe": "14.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "typescript": "^5.6.2"
+  }
+}
